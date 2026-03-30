@@ -109,6 +109,7 @@ interface MacWindowProps {
   onNavigatePrev?: () => void;
   onNavigateNext?: () => void;
   canNavigate?: boolean;
+  isMobile?: boolean;
   children: React.ReactNode;
 }
 
@@ -120,6 +121,7 @@ const MacWindow: React.FC<MacWindowProps> = ({
   onNavigatePrev,
   onNavigateNext,
   canNavigate = false,
+  isMobile = false,
   children 
 }) => {
   const dragControls = useDragControls();
@@ -173,7 +175,7 @@ const MacWindow: React.FC<MacWindowProps> = ({
 
   return (
     <motion.div
-      drag
+      drag={!isMobile}
       dragControls={dragControls}
       dragMomentum={false}
       dragListener={false}
@@ -194,25 +196,48 @@ const MacWindow: React.FC<MacWindowProps> = ({
       className="bg-white/40 backdrop-blur-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col border border-white/30"
     >
       {/* Resize Handles (Corners) */}
-      <div onMouseDown={(e) => handleResizeStart(e, 'nw')} className="absolute top-0 left-0 w-4 h-4 cursor-nw-resize z-50" />
-      <div onMouseDown={(e) => handleResizeStart(e, 'ne')} className="absolute top-0 right-0 w-4 h-4 cursor-ne-resize z-50" />
-      <div onMouseDown={(e) => handleResizeStart(e, 'sw')} className="absolute bottom-0 left-0 w-4 h-4 cursor-sw-resize z-50" />
-      <div onMouseDown={(e) => handleResizeStart(e, 'se')} className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-50" />
+      {!isMobile && (
+        <>
+          <div onMouseDown={(e) => handleResizeStart(e, 'nw')} className="absolute top-0 left-0 w-4 h-4 cursor-nw-resize z-50" />
+          <div onMouseDown={(e) => handleResizeStart(e, 'ne')} className="absolute top-0 right-0 w-4 h-4 cursor-ne-resize z-50" />
+          <div onMouseDown={(e) => handleResizeStart(e, 'sw')} className="absolute bottom-0 left-0 w-4 h-4 cursor-sw-resize z-50" />
+          <div onMouseDown={(e) => handleResizeStart(e, 'se')} className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-50" />
+        </>
+      )}
 
       {/* Title Bar (Drag Handle) */}
       <div 
-        onPointerDown={(e) => dragControls.start(e)}
-        className="h-10 bg-white/50 border-b border-black/5 flex items-center px-4 justify-between select-none cursor-grab active:cursor-grabbing"
+        onPointerDown={(e) => {
+          if (isMobile) return;
+          dragControls.start(e);
+        }}
+        className={`h-10 bg-white/50 border-b border-black/5 flex items-center px-4 justify-between select-none ${isMobile ? '' : 'cursor-grab active:cursor-grabbing'}`}
       >
         <div className="flex gap-2 items-center">
           <div className="flex gap-1.5 group">
-            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="w-3 h-3 rounded-full bg-[#FF5F56] border border-black/5 flex items-center justify-center">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+              className="w-3 h-3 rounded-full bg-[#FF5F56] border border-black/5 flex items-center justify-center"
+            >
               <X size={8} className="text-black/40 opacity-0 group-hover:opacity-100" />
             </button>
-            <button className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-black/5 flex items-center justify-center">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-black/5 flex items-center justify-center"
+            >
               <Minus size={8} className="text-black/40 opacity-0 group-hover:opacity-100" />
             </button>
-            <button className="w-3 h-3 rounded-full bg-[#27C93F] border border-black/5 flex items-center justify-center">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-3 h-3 rounded-full bg-[#27C93F] border border-black/5 flex items-center justify-center"
+            >
               <Maximize2 size={8} className="text-black/40 opacity-0 group-hover:opacity-100" />
             </button>
           </div>
@@ -263,7 +288,7 @@ const MacWindow: React.FC<MacWindowProps> = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 text-black">
+      <div className={`flex-1 overflow-y-auto custom-scrollbar text-black ${isMobile ? 'p-4' : 'p-6'}`}>
         {children}
       </div>
     </motion.div>
@@ -272,6 +297,25 @@ const MacWindow: React.FC<MacWindowProps> = ({
 
 const MasonryGallery = ({ items }: { items: GalleryItem[] }) => {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressTriggeredRef.current = false;
+  };
+
+  const startLongPress = () => {
+    clearLongPress();
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setZoom((z) => (z === 1 ? 2 : 1));
+    }, 420);
+  };
 
   if (items.length === 0) {
     return (
@@ -312,22 +356,58 @@ const MasonryGallery = ({ items }: { items: GalleryItem[] }) => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setSelectedImageIndex(null)}
+            onClick={() => {
+              setSelectedImageIndex(null);
+              setZoom(1);
+            }}
           >
-            <button className="absolute top-4 right-4 text-white/60 hover:text-white">
+            <button
+              className="absolute top-4 right-4 text-white/60 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedImageIndex(null);
+                setZoom(1);
+              }}
+            >
               <X size={32} />
             </button>
-            <motion.img 
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              src={items[selectedImageIndex]?.url} 
-              className="max-w-full max-h-full rounded-lg shadow-2xl"
-              referrerPolicy="no-referrer"
-            />
+            <div
+              className="max-w-full max-h-full overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+              style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
+            >
+              <motion.img 
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                src={items[selectedImageIndex]?.url} 
+                className="rounded-lg shadow-2xl"
+                style={{
+                  width: zoom === 1 ? 'min(100%, calc(100vw - 2rem))' : 'auto',
+                  height: zoom === 1 ? 'auto' : 'auto',
+                  maxWidth: zoom === 1 ? 'calc(100vw - 2rem)' : 'none',
+                  maxHeight: zoom === 1 ? 'calc(100vh - 2rem)' : 'none',
+                  transform: `scale(${zoom})`,
+                  transformOrigin: 'center',
+                  transition: 'transform 150ms ease'
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  startLongPress();
+                }}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  clearLongPress();
+                }}
+                onPointerLeave={clearLongPress}
+                onPointerCancel={clearLongPress}
+                referrerPolicy="no-referrer"
+              />
+            </div>
             <div className="absolute bottom-10 flex gap-4">
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
+                  setZoom(1);
                   setSelectedImageIndex((prev) => {
                     if (prev === null) return 0;
                     return prev > 0 ? prev - 1 : items.length - 1;
@@ -340,6 +420,7 @@ const MasonryGallery = ({ items }: { items: GalleryItem[] }) => {
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
+                  setZoom(1);
                   setSelectedImageIndex((prev) => {
                     if (prev === null) return 0;
                     return prev < items.length - 1 ? prev + 1 : 0;
@@ -348,6 +429,38 @@ const MasonryGallery = ({ items }: { items: GalleryItem[] }) => {
                 className="p-3 bg-white/10 rounded-full hover:bg-white/20 text-white"
               >
                 <ChevronRight size={24} />
+              </button>
+            </div>
+            <div className="absolute top-4 left-4 flex gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoom((z) => Math.max(1, +(z - 0.5).toFixed(2)));
+                }}
+                className="px-3 py-2 bg-white/10 rounded-full hover:bg-white/20 text-white text-sm"
+                aria-label="Zoom out"
+              >
+                –
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoom((z) => Math.min(4, +(z + 0.5).toFixed(2)));
+                }}
+                className="px-3 py-2 bg-white/10 rounded-full hover:bg-white/20 text-white text-sm"
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoom(1);
+                }}
+                className="px-3 py-2 bg-white/10 rounded-full hover:bg-white/20 text-white text-sm"
+                aria-label="Reset zoom"
+              >
+                1×
               </button>
             </div>
           </motion.div>
@@ -1117,7 +1230,26 @@ export default function App() {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const galleryItems = useMemo(() => buildGalleryItems(projects), [projects]);
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  const [expandedImageZoom, setExpandedImageZoom] = useState(1);
+  const expandedImageLongPressTimerRef = useRef<number | null>(null);
+  const expandedImageLongPressTriggeredRef = useRef(false);
   const [dockScale, setDockScale] = useState(1);
+  const [isTouch, setIsTouch] = useState(false);
+  const [isPhone, setIsPhone] = useState(false);
+
+  useEffect(() => {
+    const compute = () => {
+      const coarse = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+      const smallWidth = window.matchMedia?.('(max-width: 768px)')?.matches ?? (window.innerWidth <= 768);
+      const smallHeight = window.matchMedia?.('(max-height: 500px)')?.matches ?? (window.innerHeight <= 500);
+      // iPads/tablets are "touch", but not "phone" (so they keep the dock).
+      setIsTouch(coarse);
+      setIsPhone(smallWidth || smallHeight);
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, []);
 
   const getFileUrl = (win: WindowState, file: string) =>
     `/Projects/${win.folderName || win.title.toLowerCase().replace(' ', '-')}/${file}`;
@@ -1178,78 +1310,40 @@ export default function App() {
         };
 
         let projects: any[] = [];
-        try {
-          projects = await fetchProjectsFrom('/api/projects');
-        } catch (primaryError) {
-          if (window.location.port !== '3000') {
-            projects = await fetchProjectsFrom('http://localhost:3000/api/projects');
-          } else {
-            throw primaryError;
+        const apiUrlsToTry: string[] = [];
+
+        // 1) Try same-origin API first (works for most deployments / reverse proxies).
+        apiUrlsToTry.push('/api/projects');
+        apiUrlsToTry.push(`${window.location.origin}/api/projects`);
+        // 1b) Static manifest fallback (Netlify/static hosting).
+        apiUrlsToTry.push('/projects.json');
+        apiUrlsToTry.push(`${window.location.origin}/projects.json`);
+
+        // 2) Only try local fallback when we actually are on localhost.
+        const isLocal =
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1' ||
+          window.location.hostname === '';
+
+        if (isLocal) {
+          apiUrlsToTry.push('http://localhost:3000/api/projects');
+        }
+
+        let lastError: unknown = null;
+        for (const apiUrl of apiUrlsToTry) {
+          try {
+            projects = await fetchProjectsFrom(apiUrl);
+            lastError = null;
+            break;
+          } catch (e) {
+            lastError = e;
           }
         }
+
+        if (!projects.length && lastError) {
+          throw lastError;
+        }
         setProjects(projects);
-        
-        const aboutIcon = { 
-          id: 'about', 
-          type: 'about' as const, 
-          title: 'About Me', 
-          label: 'About Me',
-          icon: <User className="text-blue-400" size={48} />
-        };
-
-        const projectIcons = projects.map((p: any, i: number) => ({
-          ...p,
-          type: 'project-folder' as const,
-          label: p.title,
-          icon: <Folder className={`text-${['yellow', 'green', 'blue', 'pink'][i % 4]}-400 fill-${['yellow', 'green', 'blue', 'pink'][i % 4]}-400/20`} size={48} />
-        }));
-
-        const allBaseIcons = [aboutIcon, ...projectIcons];
-        const iconStepX = 98;
-        const iconStepY = 108;
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const maxRowsByViewport = viewportWidth < 900 ? 4 : (viewportWidth < 1300 ? 3 : 2);
-        const startY = 55;
-        const bottomReserved = 150; // keep clear of dock area
-        const usableHeight = Math.max(120, viewportHeight - startY - bottomReserved);
-        const maxRowsByHeight = Math.max(1, Math.floor(usableHeight / iconStepY) + 1);
-        const rows = Math.min(maxRowsByViewport, maxRowsByHeight, Math.max(1, allBaseIcons.length));
-        const columns = Math.max(1, Math.ceil(allBaseIcons.length / rows));
-        const gridWidth = ((columns - 1) * iconStepX) + 80;
-        const horizontalBias = Math.max(320, viewportWidth * 0.08);
-        const startX = Math.max(20, ((viewportWidth - gridWidth) / 2) - horizontalBias);
-
-        const allIcons = allBaseIcons.map((icon, i) => {
-          const row = i % rows;
-          const col = Math.floor(i / rows);
-          return {
-            ...icon,
-            x: startX + (col * iconStepX),
-            y: startY + (row * iconStepY)
-          };
-        });
-
-        const projectIconIndexes = allIcons
-          .map((icon, index) => (icon.type === 'project-folder' ? index : -1))
-          .filter((index) => index >= 0);
-
-        // Push two random project icons slightly away from the cluster for a more organic desktop layout.
-        const displacedIndexes = projectIconIndexes
-          .sort(() => Math.random() - 0.5)
-          .slice(0, Math.min(2, projectIconIndexes.length));
-
-        displacedIndexes.forEach((index) => {
-          const xOffset = (Math.random() < 0.5 ? -1 : 1) * (22 + Math.random() * 30);
-          const yOffset = (Math.random() < 0.5 ? -1 : 1) * (10 + Math.random() * 22);
-          const displacedIcon = allIcons[index];
-          if (!displacedIcon) return;
-
-          displacedIcon.x = Math.max(200, Math.min(displacedIcon.x + xOffset, viewportWidth - 90));
-          displacedIcon.y = Math.max(300, Math.min(displacedIcon.y + yOffset, viewportHeight - 140));
-        });
-
-        setDesktopIcons(allIcons);
       } catch (error) {
         console.error('Failed to fetch projects:', error);
       }
@@ -1258,22 +1352,132 @@ export default function App() {
     fetchProjects();
   }, []);
 
-  const handleIconDragEnd = (id: string, info: { offset: { x: number, y: number } }) => {
-    setDesktopIcons(prev => prev.map(icon => {
-      if (icon.id === id) {
-        let nx = icon.x + info.offset.x;
-        let ny = icon.y + info.offset.y;
-        
-        // Clamp to window boundaries
-        // Icon width is ~80px, height is ~80px
-        // Menu bar is 28px, Dock is ~80px
-        nx = Math.max(10, Math.min(nx, window.innerWidth - 90));
-        ny = Math.max(40, Math.min(ny, window.innerHeight - 140));
-        
-        return { ...icon, x: nx, y: ny };
-      }
-      return icon;
+  useEffect(() => {
+    const aboutIcon = { 
+      id: 'about', 
+      type: 'about' as const, 
+      title: 'About Me', 
+      label: 'About Me',
+      icon: <User className="text-blue-400" size={48} />
+    };
+
+    const projectIcons = projects.map((p: any, i: number) => ({
+      ...p,
+      type: 'project-folder' as const,
+      label: p.title,
+      icon: <Folder className={`text-${['yellow', 'green', 'blue', 'pink'][i % 4]}-400 fill-${['yellow', 'green', 'blue', 'pink'][i % 4]}-400/20`} size={48} />
     }));
+
+    const mobileQuickIcons = isPhone
+      ? ([
+          {
+            id: 'mobile-camera',
+            type: 'video-player' as const,
+            title: 'Camera',
+            label: 'Camera',
+            icon: <Camera className="text-red-400" size={48} />
+          },
+          {
+            id: 'mobile-messages',
+            type: 'contact' as const,
+            title: 'Contacts',
+            label: 'Messages',
+            icon: <MessageSquare className="text-green-400" size={48} />
+          },
+          {
+            id: 'mobile-mail',
+            type: 'contact' as const,
+            title: 'Mail',
+            label: 'Mail',
+            icon: <Mail className="text-blue-300" size={48} />,
+            action: 'mailto' as const
+          }
+        ] as any[])
+      : [];
+
+    const allBaseIcons = [aboutIcon, ...mobileQuickIcons, ...projectIcons];
+    const iconStepX = 98;
+    const iconStepY = 108;
+    const desktopRect = desktopRef.current?.getBoundingClientRect();
+    const viewportWidth = desktopRect?.width ?? window.innerWidth;
+    const viewportHeight = desktopRect?.height ?? window.innerHeight;
+    const maxRowsByViewport = viewportWidth < 900 ? 4 : (viewportWidth < 1300 ? 3 : 2);
+    const startY = 55;
+    const bottomReserved = isPhone ? 60 : 150; // dock is hidden only on phones
+    const usableHeight = Math.max(120, viewportHeight - startY - bottomReserved);
+    const maxRowsByHeight = Math.max(1, Math.floor(usableHeight / iconStepY) + 1);
+    const rows = Math.min(maxRowsByViewport, maxRowsByHeight, Math.max(1, allBaseIcons.length));
+    const columns = Math.max(1, Math.ceil(allBaseIcons.length / rows));
+    const gridWidth = ((columns - 1) * iconStepX) + 80;
+    const horizontalBias = Math.max(320, viewportWidth * 0.08);
+    const startX = Math.max(20, ((viewportWidth - gridWidth) / 2) - horizontalBias);
+
+    const allIcons = allBaseIcons.map((icon, i) => {
+      const row = i % rows;
+      const col = Math.floor(i / rows);
+      return {
+        ...icon,
+        x: startX + (col * iconStepX),
+        y: startY + (row * iconStepY)
+      };
+    });
+
+    const projectIconIndexes = allIcons
+      .map((icon, index) => (icon.type === 'project-folder' ? index : -1))
+      .filter((index) => index >= 0);
+
+    const displacedIndexes = projectIconIndexes
+      .sort(() => Math.random() - 0.5)
+      .slice(0, Math.min(2, projectIconIndexes.length));
+
+    displacedIndexes.forEach((index) => {
+      const xOffset = (Math.random() < 0.5 ? -1 : 1) * (22 + Math.random() * 30);
+      const yOffset = (Math.random() < 0.5 ? -1 : 1) * (10 + Math.random() * 22);
+      const displacedIcon = allIcons[index];
+      if (!displacedIcon) return;
+
+      displacedIcon.x = Math.max(10, Math.min(displacedIcon.x + xOffset, viewportWidth - 90));
+      displacedIcon.y = Math.max(40, Math.min(displacedIcon.y + yOffset, viewportHeight - 140));
+    });
+
+    setDesktopIcons(allIcons);
+  }, [projects, isPhone]);
+
+  const handleIconDragEnd = (
+    id: string,
+    info: { point: { x: number; y: number } },
+    el: HTMLElement | null
+  ) => {
+    setDesktopIcons((prev) =>
+      prev.map((icon) => {
+        if (icon.id !== id) return icon;
+
+        const desktopRect = desktopRef.current?.getBoundingClientRect();
+        if (!desktopRect) return icon;
+
+        const iconRect = el?.getBoundingClientRect();
+        const iconW = iconRect?.width ?? 80;
+        const iconH = iconRect?.height ?? 92;
+
+        const localX = info.point.x - desktopRect.left;
+        const localY = info.point.y - desktopRect.top;
+
+        // Keep the exact pointer offset within the icon.
+        const pointerOffsetX = iconRect ? info.point.x - iconRect.left : iconW / 2;
+        const pointerOffsetY = iconRect ? info.point.y - iconRect.top : iconH / 2;
+
+        let nx = localX - pointerOffsetX;
+        let ny = localY - pointerOffsetY;
+
+        const maxX = desktopRect.width - iconW - 10;
+        const maxY = desktopRect.height - iconH - 10;
+
+        nx = Math.max(10, Math.min(nx, maxX));
+        ny = Math.max(40, Math.min(ny, maxY));
+
+        return { ...icon, x: nx, y: ny };
+      })
+    );
   };
 
   useEffect(() => {
@@ -1335,6 +1539,13 @@ export default function App() {
       return;
     }
 
+    const defaultWidth = type === 'video-player' ? 800 : 600;
+    const defaultHeight = type === 'video-player' ? 500 : (type === 'about' ? 560 : 450);
+    const safeW = Math.max(320, window.innerWidth - 24);
+    const safeH = Math.max(260, window.innerHeight - 140);
+    const w = isPhone ? Math.min(defaultWidth, safeW) : defaultWidth;
+    const h = isPhone ? Math.min(defaultHeight, safeH) : defaultHeight;
+
     const newWindow: WindowState = {
       id,
       title,
@@ -1342,10 +1553,10 @@ export default function App() {
       isMinimized: false,
       zIndex: maxZIndex + 1,
       type,
-      width: type === 'video-player' ? 800 : 600,
-      height: type === 'video-player' ? 500 : (type === 'about' ? 560 : 450),
-      x: 100 + (windows.length * 30),
-      y: 100 + (windows.length * 30),
+      width: w,
+      height: h,
+      x: isPhone ? 12 : (100 + (windows.length * 30)),
+      y: isPhone ? 52 : (100 + (windows.length * 30)),
       files,
       videoUrl,
       folderName
@@ -1373,12 +1584,12 @@ export default function App() {
     setWindows(windows.map(w => w.id === id ? { ...w, ...updates } : w));
   };
 
-  const addStar = () => {
+  const addStar = (x?: number, y?: number) => {
     const newStar: StarState = {
       id: Date.now(),
       color: ['#FFB7CE', '#AEC6CF', '#B3E5BE', '#E0BBE4', '#FFF9B1', '#FFDAB9', '#C8A2C8', '#87CEEB'][Math.floor(Math.random() * 8)],
-      x: Math.random() * window.innerWidth,
-      y: Math.random() * window.innerHeight,
+      x: typeof x === 'number' ? x : (Math.random() * window.innerWidth),
+      y: typeof y === 'number' ? y : (Math.random() * window.innerHeight),
       z: Math.random() * 50 - 25,
       vx: (Math.random() - 0.5) * 0.5,
       vy: (Math.random() - 0.5) * 0.5,
@@ -1388,8 +1599,20 @@ export default function App() {
     setStars(prev => [...prev, newStar]);
   };
 
+  const handleDesktopPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPhone) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    const rect = desktopRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    addStar(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
   return (
-    <div ref={desktopRef} className="relative w-full h-screen overflow-hidden bg-[#fdfdfd] selection:bg-blue-500/30">
+    <div
+      ref={desktopRef}
+      className="relative w-full h-screen overflow-hidden bg-[#fdfdfd] selection:bg-blue-500/30"
+      onPointerDown={handleDesktopPointerDown}
+    >
       {/* <CheckeredBackground /> */}
       <ThreeWorld windows={windows} stars={stars} onStarDrag={handleStarDrag} />
 
@@ -1414,21 +1637,27 @@ export default function App() {
       {/* Desktop Icons */}
       {desktopIcons.map(icon => (
         <motion.div 
-          key={icon.id} 
+          // Include position in key so Framer Motion remounts after drop,
+          // preventing "new state position + previous drag offset" glitches.
+          key={`${icon.id}-${Math.round(icon.x)}-${Math.round(icon.y)}`} 
           drag
           dragMomentum={false}
           dragConstraints={desktopRef}
           dragElastic={0}
-          animate={{ x: 0, y: 0 }}
-          transition={{ duration: 0 }}
-          onDragEnd={(_, info) => handleIconDragEnd(icon.id, info)}
+          onDragEnd={(e, info) => handleIconDragEnd(icon.id, info, e.currentTarget as HTMLElement)}
           className="absolute z-10"
           style={{ left: icon.x, top: icon.y }}
         >
           <DesktopIcon 
             icon={icon.icon} 
             label={icon.label} 
-            onClick={() => openWindow(icon.type, icon.title, (icon as any).files, undefined, (icon as any).folderName)}
+            onClick={() => {
+              if ((icon as any).action === 'mailto') {
+                window.open(`mailto:${CONTACT_EMAIL}`, '_self');
+                return;
+              }
+              openWindow(icon.type, icon.title, (icon as any).files, undefined, (icon as any).folderName);
+            }}
           />
         </motion.div>
       ))}
@@ -1446,6 +1675,7 @@ export default function App() {
               onNavigatePrev={() => navigateProjectWindow(win.id, -1)}
               onNavigateNext={() => navigateProjectWindow(win.id, 1)}
               canNavigate={win.type === 'project-folder' && projects.length > 1}
+              isMobile={isPhone}
             >
                 {win.type === 'stars' && (
                   <div className="flex flex-col items-center justify-center h-full gap-6">
@@ -1470,7 +1700,7 @@ export default function App() {
              <h1 className="text-2xl font-bold ">Hello, I'm Paula.</h1>
              <p className="text-gray-600 leading-relaxed">
                I am a creative copywriter and narrative strategist who builds worlds with words. 
-               This portfolio is a digital study of how language and interface intersect—a tribute 
+               This portfolio is a digital study of how language and interface intersect - a tribute 
                to the classic desktops where my first stories were typed.
              </p>
             <div className="grid grid-cols-2 gap-4 pt-4">
@@ -1568,9 +1798,7 @@ export default function App() {
                           );
                         }
                       })()}
-                      <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-lg px-4 py-2 rounded-full text-white text-[11px] font-bold tracking-wide opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 border border-white/10">
-                        {win.videoUrl ? win.videoUrl.split('/').pop() : (win.files?.[0] || win.title)}
-                      </div>
+                     
                     </div>
                     <div className="h-28 flex gap-6 p-4 items-center overflow-x-auto custom-scrollbar bg-white/5 rounded-xl border border-white/10">
                       {win.files?.map((file, i) => {
@@ -1672,44 +1900,46 @@ export default function App() {
       </div>
 
 
-      {/* Dock */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2 z-[200]"
-        style={{ bottom: 'clamp(8px, 3vh, 24px)' }}
-      >
+      {/* Dock (hidden on mobile) */}
+      {!isPhone && (
         <div
-          ref={dockRef}
-          className="bg-white/10 backdrop-blur-3xl border border-white/30 flex items-end shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
-          style={{
-            padding: 'clamp(6px, 1.05vh, 12px) clamp(8px, 1.2vh, 14px)',
-            borderRadius: 'clamp(12px, 2.1vh, 22px)',
-            gap: 'clamp(4px, 0.8vh, 10px)',
-            transform: `scale(${dockScale})`,
-            transformOrigin: 'bottom center'
-          }}
+          className="absolute left-1/2 -translate-x-1/2 z-[200]"
+          style={{ bottom: 'clamp(8px, 3vh, 24px)' }}
         >
-          <DockIcon icon={<Globe className="text-blue-400" />} label="Safari" onClick={() => {}} />
-          <DockIcon icon={<MessageSquare className="text-green-400" />} label="Messages" onClick={() => openWindow('contact', 'Contacts')} />
-          <DockIcon icon={<Mail className="text-blue-300" />} label="Mail" onClick={() => window.open(`mailto:${CONTACT_EMAIL}`, '_self')} />
-          <DockIcon icon={<ImageIcon className="text-pink-400" />} label="Photos" onClick={() => openWindow('gallery', 'Photos')} />
-          <DockIcon icon={<StarIcon className="text-yellow-400" />} label="Star Factory" onClick={() => openWindow('stars', 'Star Factory')} />
-          <DockIcon
-            icon={<Camera className="text-red-400" />}
-            label="Media Player"
-            onClick={() => {
-              if (firstDockVideo) {
-                openWindow('video-player', firstDockVideo.title, undefined, firstDockVideo.url);
-              } else {
-                openWindow('video-player', 'Media Player', undefined, '/Projects/unititled-4/olve1.mov');
-              }
+          <div
+            ref={dockRef}
+            className="bg-white/10 backdrop-blur-3xl border border-white/30 flex items-end shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
+            style={{
+              padding: 'clamp(6px, 1.05vh, 12px) clamp(8px, 1.2vh, 14px)',
+              borderRadius: 'clamp(12px, 2.1vh, 22px)',
+              gap: 'clamp(4px, 0.8vh, 10px)',
+              transform: `scale(${dockScale})`,
+              transformOrigin: 'bottom center'
             }}
-          />
-          <DockIcon icon={<Music className="text-red-400" />} label="Music" onClick={() => {}} />
-          <div className="w-[1px] bg-white/20 self-center" style={{ height: 'clamp(24px, 4vh, 40px)', marginInline: 'clamp(3px, 0.6vh, 8px)' }} />
-          <DockIcon icon={<Folder className="text-yellow-400" />} label="Downloads" onClick={() => openWindow('folder', 'Downloads')} />
-          <DockIcon icon={<Trash2 className="text-gray-400" />} label="Trash" onClick={() => {}} />
+          >
+            <DockIcon icon={<Globe className="text-blue-400" />} label="Safari" onClick={() => {}} />
+            <DockIcon icon={<MessageSquare className="text-green-400" />} label="Messages" onClick={() => openWindow('contact', 'Contacts')} />
+            <DockIcon icon={<Mail className="text-blue-300" />} label="Mail" onClick={() => window.open(`mailto:${CONTACT_EMAIL}`, '_self')} />
+            <DockIcon icon={<ImageIcon className="text-pink-400" />} label="Photos" onClick={() => openWindow('gallery', 'Photos')} />
+            <DockIcon icon={<StarIcon className="text-yellow-400" />} label="Star Factory" onClick={() => openWindow('stars', 'Star Factory')} />
+            <DockIcon
+              icon={<Camera className="text-red-400" />}
+              label="Media Player"
+              onClick={() => {
+                if (firstDockVideo) {
+                  openWindow('video-player', firstDockVideo.title, undefined, firstDockVideo.url);
+                } else {
+                  openWindow('video-player', 'Media Player', undefined, '/Projects/unititled-4/olve1.mov');
+                }
+              }}
+            />
+            <DockIcon icon={<Music className="text-red-400" />} label="Music" onClick={() => {}} />
+            <div className="w-[1px] bg-white/20 self-center" style={{ height: 'clamp(24px, 4vh, 40px)', marginInline: 'clamp(3px, 0.6vh, 8px)' }} />
+            <DockIcon icon={<Folder className="text-yellow-400" />} label="Downloads" onClick={() => openWindow('folder', 'Downloads')} />
+            <DockIcon icon={<Trash2 className="text-gray-400" />} label="Trash" onClick={() => {}} />
+          </div>
         </div>
-      </div>
+      )}
 
       <AnimatePresence>
         {expandedImageUrl && (
@@ -1718,25 +1948,110 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[1200] bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setExpandedImageUrl(null)}
+            onClick={() => {
+              setExpandedImageUrl(null);
+              setExpandedImageZoom(1);
+            }}
           >
             <button
               className="absolute top-4 right-4 text-white/60 hover:text-white"
               onClick={(e) => {
                 e.stopPropagation();
                 setExpandedImageUrl(null);
+                setExpandedImageZoom(1);
               }}
             >
               <X size={32} />
             </button>
-            <motion.img
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              src={expandedImageUrl}
-              alt="Expanded project image"
-              className="max-w-full max-h-full rounded-lg shadow-2xl"
-              referrerPolicy="no-referrer"
-            />
+            <div
+              className="max-w-full max-h-full overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+              style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
+            >
+              <motion.img
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                src={expandedImageUrl}
+                alt="Expanded project image"
+                className="rounded-lg shadow-2xl"
+                style={{
+                  width: expandedImageZoom === 1 ? 'min(100%, calc(100vw - 2rem))' : 'auto',
+                  height: expandedImageZoom === 1 ? 'auto' : 'auto',
+                  maxWidth: expandedImageZoom === 1 ? 'calc(100vw - 2rem)' : 'none',
+                  maxHeight: expandedImageZoom === 1 ? 'calc(100vh - 2rem)' : 'none',
+                  transform: `scale(${expandedImageZoom})`,
+                  transformOrigin: 'center',
+                  transition: 'transform 150ms ease'
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (expandedImageLongPressTimerRef.current !== null) {
+                    window.clearTimeout(expandedImageLongPressTimerRef.current);
+                    expandedImageLongPressTimerRef.current = null;
+                  }
+                  expandedImageLongPressTriggeredRef.current = false;
+                  expandedImageLongPressTimerRef.current = window.setTimeout(() => {
+                    expandedImageLongPressTriggeredRef.current = true;
+                    setExpandedImageZoom((z) => (z === 1 ? 2 : 1));
+                  }, 420);
+                }}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  if (expandedImageLongPressTimerRef.current !== null) {
+                    window.clearTimeout(expandedImageLongPressTimerRef.current);
+                    expandedImageLongPressTimerRef.current = null;
+                  }
+                  expandedImageLongPressTriggeredRef.current = false;
+                }}
+                onPointerLeave={() => {
+                  if (expandedImageLongPressTimerRef.current !== null) {
+                    window.clearTimeout(expandedImageLongPressTimerRef.current);
+                    expandedImageLongPressTimerRef.current = null;
+                  }
+                  expandedImageLongPressTriggeredRef.current = false;
+                }}
+                onPointerCancel={() => {
+                  if (expandedImageLongPressTimerRef.current !== null) {
+                    window.clearTimeout(expandedImageLongPressTimerRef.current);
+                    expandedImageLongPressTimerRef.current = null;
+                  }
+                  expandedImageLongPressTriggeredRef.current = false;
+                }}
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="absolute top-4 left-4 flex gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedImageZoom((z) => Math.max(1, +(z - 0.5).toFixed(2)));
+                }}
+                className="px-3 py-2 bg-white/10 rounded-full hover:bg-white/20 text-white text-sm"
+                aria-label="Zoom out"
+              >
+                –
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedImageZoom((z) => Math.min(4, +(z + 0.5).toFixed(2)));
+                }}
+                className="px-3 py-2 bg-white/10 rounded-full hover:bg-white/20 text-white text-sm"
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedImageZoom(1);
+                }}
+                className="px-3 py-2 bg-white/10 rounded-full hover:bg-white/20 text-white text-sm"
+                aria-label="Reset zoom"
+              >
+                1×
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
